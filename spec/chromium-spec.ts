@@ -2463,6 +2463,14 @@ describe('navigator.serial', () => {
     expect(port).to.equal(notFoundError);
   });
 
+  it('does not return a port when select-serial-port event is defined and does not select port', async () => {
+    w.webContents.session.on('select-serial-port', (event, portList, webContents, callback) => {
+      callback('');
+    });
+    const port = await getPorts();
+    expect(port).to.equal(notFoundError);
+  });
+
   it('does not return a port when permission denied', async () => {
     w.webContents.session.on('select-serial-port', (event, portList, webContents, callback) => {
       callback(portList[0].portId);
@@ -2480,7 +2488,7 @@ describe('navigator.serial', () => {
     expect(port).to.equal(notFoundError);
   });
 
-  it('returns a port when select-serial-port event is defined', async () => {
+  it('returns a port when select-serial-port event is defined', async function () {
     let havePorts = false;
     w.webContents.session.on('select-serial-port', (event, portList, webContents, callback) => {
       if (portList.length > 0) {
@@ -2491,14 +2499,11 @@ describe('navigator.serial', () => {
       }
     });
     const port = await getPorts();
-    if (havePorts) {
-      expect(port).to.equal('[object SerialPort]');
-    } else {
-      expect(port).to.equal(notFoundError);
-    }
+    if (!havePorts) this.skip();
+    expect(port).to.equal('[object SerialPort]');
   });
 
-  it('navigator.serial.getPorts() returns values', async () => {
+  it('navigator.serial.getPorts() returns values', async function () {
     let havePorts = false;
 
     w.webContents.session.on('select-serial-port', (event, portList, webContents, callback) => {
@@ -2510,13 +2515,12 @@ describe('navigator.serial', () => {
       }
     });
     await getPorts();
-    if (havePorts) {
-      const grantedPorts = await w.webContents.executeJavaScript('navigator.serial.getPorts()');
-      expect(grantedPorts).to.not.be.empty();
-    }
+    if (!havePorts) this.skip();
+    const grantedPorts = await w.webContents.executeJavaScript('navigator.serial.getPorts()');
+    expect(grantedPorts).to.not.be.empty();
   });
 
-  it('supports port.forget()', async () => {
+  it('supports port.forget()', async function () {
     let forgottenPortFromEvent = {};
     let havePorts = false;
 
@@ -2534,29 +2538,27 @@ describe('navigator.serial', () => {
     });
 
     await getPorts();
-    if (havePorts) {
-      const grantedPorts = await w.webContents.executeJavaScript('navigator.serial.getPorts()');
-      if (grantedPorts.length > 0) {
-        const forgottenPort = await w.webContents.executeJavaScript(`
-          navigator.serial.getPorts().then(async(ports) => {
-            const portInfo = await ports[0].getInfo();
-            await ports[0].forget();
-            if (portInfo.usbVendorId && portInfo.usbProductId) {
-              return {
-                vendorId: '' + portInfo.usbVendorId,
-                productId: '' + portInfo.usbProductId
-              }
-            } else {
-              return {};
-            }
-          })
-        `);
-        const grantedPorts2 = await w.webContents.executeJavaScript('navigator.serial.getPorts()');
-        expect(grantedPorts2.length).to.be.lessThan(grantedPorts.length);
-        if (forgottenPort.vendorId && forgottenPort.productId) {
-          expect(forgottenPortFromEvent).to.include(forgottenPort);
+    if (!havePorts) this.skip();
+    const grantedPorts = await w.webContents.executeJavaScript('navigator.serial.getPorts()');
+    expect(grantedPorts).to.not.be.empty();
+    const forgottenPort = await w.webContents.executeJavaScript(`
+      navigator.serial.getPorts().then(async(ports) => {
+        const portInfo = await ports[0].getInfo();
+        await ports[0].forget();
+        if (portInfo.usbVendorId && portInfo.usbProductId) {
+          return {
+            vendorId: '' + portInfo.usbVendorId,
+            productId: '' + portInfo.usbProductId
+          }
+        } else {
+          return {};
         }
-      }
+      })
+    `);
+    const grantedPorts2 = await w.webContents.executeJavaScript('navigator.serial.getPorts()');
+    expect(grantedPorts2.length).to.be.lessThan(grantedPorts.length);
+    if (forgottenPort.vendorId && forgottenPort.productId) {
+      expect(forgottenPortFromEvent).to.include(forgottenPort);
     }
   });
 });
@@ -2878,6 +2880,18 @@ describe('navigator.hid', () => {
     expect(device).to.equal('');
   });
 
+  it('does not return a device when select-hid-device event is defined and does not select port', async () => {
+    let selectFired = false;
+    w.webContents.session.on('select-hid-device', (event, details, callback) => {
+      expect(details.frame).to.have.property('frameTreeNodeId').that.is.a('number');
+      selectFired = true;
+      callback();
+    });
+    const device = await requestDevices();
+    expect(selectFired).to.be.true();
+    expect(device).to.equal('');
+  });
+
   it('does not return a device when permission denied', async () => {
     let selectFired = false;
     w.webContents.session.on('select-hid-device', (event, details, callback) => {
@@ -2890,7 +2904,41 @@ describe('navigator.hid', () => {
     expect(device).to.equal('');
   });
 
-  it('returns a device when select-hid-device event is defined', async () => {
+  it('does not return a device when DevicePermissionHandler is defined and returns false', async function () {
+    let haveDevices = false;
+    let selectFired = false;
+    let gotDevicePerms = false;
+    w.webContents.session.on('select-hid-device', (event, details, callback) => {
+      selectFired = true;
+      if (details.deviceList.length > 0) {
+        const foundDevice = details.deviceList.find((device) => {
+          if (device.name && device.name !== '' && device.serialNumber && device.serialNumber !== '') {
+            haveDevices = true;
+            return true;
+          }
+        });
+        if (foundDevice) {
+          callback(foundDevice.deviceId);
+          return;
+        }
+      }
+      callback();
+    });
+    session.defaultSession.setDevicePermissionHandler(() => {
+      gotDevicePerms = true;
+      return false;
+    });
+    await w.webContents.executeJavaScript('navigator.hid.getDevices();', true);
+    const device = await requestDevices();
+    if (!haveDevices) this.skip();
+    expect(selectFired).to.be.true();
+    expect(device).to.equal('');
+    expect(gotDevicePerms).to.be.true();
+  });
+
+  // if (!haveDevices) this.skip();
+
+  it('returns a device when select-hid-device event is defined', async function () {
     let haveDevices = false;
     let selectFired = false;
     w.webContents.session.on('select-hid-device', (event, details, callback) => {
@@ -2904,28 +2952,23 @@ describe('navigator.hid', () => {
       }
     });
     const device = await requestDevices();
+    if (!haveDevices) this.skip();
     expect(selectFired).to.be.true();
-    if (haveDevices) {
-      expect(device).to.contain('[object HIDDevice]');
-    } else {
-      expect(device).to.equal('');
-    }
-    if (haveDevices) {
-      // Verify that navigation will clear device permissions
-      const grantedDevices = await w.webContents.executeJavaScript('navigator.hid.getDevices()');
-      expect(grantedDevices).to.not.be.empty();
-      w.loadURL(serverUrl);
-      const [,,,,, frameProcessId, frameRoutingId] = await once(w.webContents, 'did-frame-navigate');
-      const frame = webFrameMain.fromId(frameProcessId, frameRoutingId);
-      expect(!!frame).to.be.true();
-      if (frame) {
-        const grantedDevicesOnNewPage = await frame.executeJavaScript('navigator.hid.getDevices()');
-        expect(grantedDevicesOnNewPage).to.be.empty();
-      }
+    expect(device).to.contain('[object HIDDevice]');
+    // Verify that navigation will clear device permissions
+    const grantedDevices = await w.webContents.executeJavaScript('navigator.hid.getDevices()');
+    expect(grantedDevices).to.not.be.empty();
+    w.loadURL(serverUrl);
+    const [,,,,, frameProcessId, frameRoutingId] = await once(w.webContents, 'did-frame-navigate');
+    const frame = webFrameMain.fromId(frameProcessId, frameRoutingId);
+    expect(!!frame).to.be.true();
+    if (frame) {
+      const grantedDevicesOnNewPage = await frame.executeJavaScript('navigator.hid.getDevices()');
+      expect(grantedDevicesOnNewPage).to.be.empty();
     }
   });
 
-  it('returns a device when DevicePermissionHandler is defined', async () => {
+  it('returns a device when DevicePermissionHandler is defined', async function () {
     let haveDevices = false;
     let selectFired = false;
     let gotDevicePerms = false;
@@ -2952,15 +2995,12 @@ describe('navigator.hid', () => {
     await w.webContents.executeJavaScript('navigator.hid.getDevices();', true);
     const device = await requestDevices();
     expect(selectFired).to.be.true();
-    if (haveDevices) {
-      expect(device).to.contain('[object HIDDevice]');
-      expect(gotDevicePerms).to.be.true();
-    } else {
-      expect(device).to.equal('');
-    }
+    if (!haveDevices) this.skip();
+    expect(device).to.contain('[object HIDDevice]');
+    expect(gotDevicePerms).to.be.true();
   });
 
-  it('excludes a device when a exclusionFilter is specified', async () => {
+  it('excludes a device when a exclusionFilter is specified', async function () {
     const exclusionFilters = <any>[];
     let haveDevices = false;
     let checkForExcludedDevice = false;
@@ -2990,17 +3030,16 @@ describe('navigator.hid', () => {
     });
 
     await requestDevices();
-    if (haveDevices) {
-      // We have devices to exclude, so check if exclusionFilters work
-      checkForExcludedDevice = true;
-      await w.webContents.executeJavaScript(`
-        navigator.hid.requestDevice({filters: [], exclusionFilters: ${JSON.stringify(exclusionFilters)}}).then(device => device.toString()).catch(err => err.toString());
+    if (!haveDevices) this.skip();
+    // We have devices to exclude, so check if exclusionFilters work
+    checkForExcludedDevice = true;
+    await w.webContents.executeJavaScript(`
+      navigator.hid.requestDevice({filters: [], exclusionFilters: ${JSON.stringify(exclusionFilters)}}).then(device => device.toString()).catch(err => err.toString());
 
-      `, true);
-    }
+    `, true);
   });
 
-  it('supports device.forget()', async () => {
+  it('supports device.forget()', async function () {
     let deletedDeviceFromEvent;
     let haveDevices = false;
     w.webContents.session.on('select-hid-device', (event, details, callback) => {
@@ -3015,25 +3054,23 @@ describe('navigator.hid', () => {
       deletedDeviceFromEvent = details.device;
     });
     await requestDevices();
-    if (haveDevices) {
-      const grantedDevices = await w.webContents.executeJavaScript('navigator.hid.getDevices()');
-      if (grantedDevices.length > 0) {
-        const deletedDevice = await w.webContents.executeJavaScript(`
-          navigator.hid.getDevices().then(devices => {
-            devices[0].forget();
-            return {
-              vendorId: devices[0].vendorId,
-              productId: devices[0].productId,
-              name: devices[0].productName
-            }
-          })
-        `);
-        const grantedDevices2 = await w.webContents.executeJavaScript('navigator.hid.getDevices()');
-        expect(grantedDevices2.length).to.be.lessThan(grantedDevices.length);
-        if (deletedDevice.name !== '' && deletedDevice.productId && deletedDevice.vendorId) {
-          expect(deletedDeviceFromEvent).to.include(deletedDevice);
+    if (!haveDevices) this.skip();
+    const grantedDevices = await w.webContents.executeJavaScript('navigator.hid.getDevices()');
+    expect(grantedDevices).to.not.be.empty();
+    const deletedDevice = await w.webContents.executeJavaScript(`
+      navigator.hid.getDevices().then(devices => {
+        devices[0].forget();
+        return {
+          vendorId: devices[0].vendorId,
+          productId: devices[0].productId,
+          name: devices[0].productName
         }
-      }
+      })
+    `);
+    const grantedDevices2 = await w.webContents.executeJavaScript('navigator.hid.getDevices()');
+    expect(grantedDevices2.length).to.be.lessThan(grantedDevices.length);
+    if (deletedDevice.name !== '' && deletedDevice.productId && deletedDevice.vendorId) {
+      expect(deletedDeviceFromEvent).to.include(deletedDevice);
     }
   });
 });
@@ -3090,7 +3127,51 @@ describe('navigator.usb', () => {
     expect(device).to.equal(notFoundError);
   });
 
-  it('returns a device when select-usb-device event is defined', async () => {
+  it('does not return a device when select-usb-device event is defined and does not select device', async () => {
+    let selectFired = false;
+    w.webContents.session.on('select-usb-device', (event, details, callback) => {
+      expect(details.frame).to.have.property('frameTreeNodeId').that.is.a('number');
+      selectFired = true;
+      callback();
+    });
+    const device = await requestDevices();
+    expect(selectFired).to.be.true();
+    expect(device).to.equal(notFoundError);
+  });
+
+  it('does not return a device when DevicePermissionHandler is defined and returns false', async function () {
+    let haveDevices = false;
+    let selectFired = false;
+    let gotDevicePerms = false;
+    w.webContents.session.on('select-usb-device', (event, details, callback) => {
+      selectFired = true;
+      if (details.deviceList.length > 0) {
+        const foundDevice = details.deviceList.find((device) => {
+          if (device.productName && device.productName !== '' && device.serialNumber && device.serialNumber !== '') {
+            haveDevices = true;
+            return true;
+          }
+        });
+        if (foundDevice) {
+          callback(foundDevice.deviceId);
+          return;
+        }
+      }
+      callback();
+    });
+    session.defaultSession.setDevicePermissionHandler(() => {
+      gotDevicePerms = true;
+      return false;
+    });
+    await w.webContents.executeJavaScript('navigator.usb.getDevices();', true);
+    const device = await requestDevices();
+    if (!haveDevices) this.skip();
+    expect(selectFired).to.be.true();
+    expect(gotDevicePerms).to.be.true();
+    expect(device).to.equal(notFoundError);
+  });
+
+  it('returns a device when select-usb-device event is defined', async function () {
     let haveDevices = false;
     let selectFired = false;
     w.webContents.session.on('select-usb-device', (event, details, callback) => {
@@ -3105,27 +3186,22 @@ describe('navigator.usb', () => {
     });
     const device = await requestDevices();
     expect(selectFired).to.be.true();
-    if (haveDevices) {
-      expect(device).to.contain('[object USBDevice]');
-    } else {
-      expect(device).to.equal(notFoundError);
-    }
-    if (haveDevices) {
-      // Verify that navigation will clear device permissions
-      const grantedDevices = await w.webContents.executeJavaScript('navigator.usb.getDevices()');
-      expect(grantedDevices).to.not.be.empty();
-      w.loadURL(serverUrl);
-      const [,,,,, frameProcessId, frameRoutingId] = await once(w.webContents, 'did-frame-navigate');
-      const frame = webFrameMain.fromId(frameProcessId, frameRoutingId);
-      expect(!!frame).to.be.true();
-      if (frame) {
-        const grantedDevicesOnNewPage = await frame.executeJavaScript('navigator.usb.getDevices()');
-        expect(grantedDevicesOnNewPage).to.be.empty();
-      }
+    if (!haveDevices) this.skip();
+    expect(device).to.contain('[object USBDevice]');
+    // Verify that navigation will clear device permissions
+    const grantedDevices = await w.webContents.executeJavaScript('navigator.usb.getDevices()');
+    expect(grantedDevices).to.not.be.empty();
+    w.loadURL(serverUrl);
+    const [,,,,, frameProcessId, frameRoutingId] = await once(w.webContents, 'did-frame-navigate');
+    const frame = webFrameMain.fromId(frameProcessId, frameRoutingId);
+    expect(!!frame).to.be.true();
+    if (frame) {
+      const grantedDevicesOnNewPage = await frame.executeJavaScript('navigator.usb.getDevices()');
+      expect(grantedDevicesOnNewPage).to.be.empty();
     }
   });
 
-  it('returns a device when DevicePermissionHandler is defined', async () => {
+  it('returns a device when DevicePermissionHandler is defined', async function () {
     let haveDevices = false;
     let selectFired = false;
     let gotDevicePerms = false;
@@ -3151,16 +3227,13 @@ describe('navigator.usb', () => {
     });
     await w.webContents.executeJavaScript('navigator.usb.getDevices();', true);
     const device = await requestDevices();
+    if (!haveDevices) this.skip();
     expect(selectFired).to.be.true();
-    if (haveDevices) {
-      expect(device).to.contain('[object USBDevice]');
-      expect(gotDevicePerms).to.be.true();
-    } else {
-      expect(device).to.equal(notFoundError);
-    }
+    expect(device).to.contain('[object USBDevice]');
+    expect(gotDevicePerms).to.be.true();
   });
 
-  it('supports device.forget()', async () => {
+  it('supports device.forget()', async function () {
     let deletedDeviceFromEvent;
     let haveDevices = false;
     w.webContents.session.on('select-usb-device', (event, details, callback) => {
@@ -3175,25 +3248,23 @@ describe('navigator.usb', () => {
       deletedDeviceFromEvent = details.device;
     });
     await requestDevices();
-    if (haveDevices) {
-      const grantedDevices = await w.webContents.executeJavaScript('navigator.usb.getDevices()');
-      if (grantedDevices.length > 0) {
-        const deletedDevice: Electron.USBDevice = await w.webContents.executeJavaScript(`
-          navigator.usb.getDevices().then(devices => {
-            devices[0].forget();
-            return {
-              vendorId: devices[0].vendorId,
-              productId: devices[0].productId,
-              productName: devices[0].productName
-            }
-          })
-        `);
-        const grantedDevices2 = await w.webContents.executeJavaScript('navigator.usb.getDevices()');
-        expect(grantedDevices2.length).to.be.lessThan(grantedDevices.length);
-        if (deletedDevice.productName !== '' && deletedDevice.productId && deletedDevice.vendorId) {
-          expect(deletedDeviceFromEvent).to.include(deletedDevice);
+    if (!haveDevices) this.skip();
+    const grantedDevices = await w.webContents.executeJavaScript('navigator.usb.getDevices()');
+    expect(grantedDevices).to.not.be.empty();
+    const deletedDevice: Electron.USBDevice = await w.webContents.executeJavaScript(`
+      navigator.usb.getDevices().then(devices => {
+        devices[0].forget();
+        return {
+          vendorId: devices[0].vendorId,
+          productId: devices[0].productId,
+          productName: devices[0].productName
         }
-      }
+      })
+    `);
+    const grantedDevices2 = await w.webContents.executeJavaScript('navigator.usb.getDevices()');
+    expect(grantedDevices2.length).to.be.lessThan(grantedDevices.length);
+    if (deletedDevice.productName !== '' && deletedDevice.productId && deletedDevice.vendorId) {
+      expect(deletedDeviceFromEvent).to.include(deletedDevice);
     }
   });
 });
