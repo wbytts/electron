@@ -92,7 +92,7 @@ class NotifyIcon : public TrayIcon {
   base::win::ScopedHICON icon_;
 
   // The context menu.
-  RAW_PTR_EXCLUSION ElectronMenuModel* menu_model_ = nullptr;
+  raw_ptr<ElectronMenuModel> menu_model_ = nullptr;
 
   // An optional GUID used for identifying tray entries on Windows
   GUID guid_ = GUID_DEFAULT;
