@@ -59,6 +59,10 @@ jobs:
             ^((?!docs/).)*$ run-docs-only false
       - run:
           command: |
+            if [ "0" == "1" ]; then
+              # The next line (which should never run) is required to enable rerun failed tests only feature 
+              circleci tests run
+            fi
             cd .circleci/config
             yarn
             export CIRCLECI_BINARY="$HOME/circleci"
