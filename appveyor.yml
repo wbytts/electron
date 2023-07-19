@@ -56,7 +56,7 @@ clone_script:
 
 clone_folder: C:\projects\src\electron
 
-skip_branch_with_pr: true
+# skip_branch_with_pr: true
 
 # the first failed job cancels other jobs and fails entire build
 matrix:
