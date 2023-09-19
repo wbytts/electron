@@ -95,7 +95,10 @@
   V(electron_renderer_ipc)            \
   V(electron_renderer_web_frame)
 
-#define ELECTRON_UTILITY_BINDINGS(V) V(electron_utility_parent_port)
+#define ELECTRON_UTILITY_BINDINGS(V) \
+  V(electron_browser_event_emitter)  \
+  V(electron_browser_net)            \
+  V(electron_utility_parent_port)
 
 #define ELECTRON_VIEWS_BINDINGS(V) V(electron_browser_image_view)
 
