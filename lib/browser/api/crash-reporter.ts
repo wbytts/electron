@@ -3,7 +3,7 @@ import * as deprecate from '@electron/internal/common/deprecate';
 
 const binding = process._linkedBinding('electron_browser_crash_reporter');
 
-class CrashReporter {
+class CrashReporter implements Electron.CrashReporter {
   start (options: Electron.CrashReporterStartOptions) {
     const {
       productName = app.name,
@@ -45,7 +45,7 @@ class CrashReporter {
         return bts - ats;
       });
 
-    return (reports.length > 0) ? reports[0] : null;
+    return (reports.length > 0) ? reports[0] : null!;
   }
 
   getUploadedReports (): Electron.CrashReport[] {
