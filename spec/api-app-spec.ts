@@ -59,9 +59,7 @@ describe('app module', () => {
     secureUrl = (await listen(server)).url;
   });
 
-  after(done => {
-    server.close(() => done());
-  });
+  after(async () => promisify(server.close)());
 
   describe('app.getVersion()', () => {
     it('returns the version field of package.json', () => {
@@ -356,22 +354,18 @@ describe('app module', () => {
     let server: net.Server | null = null;
     const socketPath = process.platform === 'win32' ? '\\\\.\\pipe\\electron-app-relaunch' : '/tmp/electron-app-relaunch';
 
-    beforeEach(done => {
-      fs.unlink(socketPath, () => {
-        server = net.createServer();
-        server.listen(socketPath);
-        done();
-      });
+    beforeEach(async () => {
+      await fs.promises.unlink(socketPath);
+      server = net.createServer();
+      server.listen(socketPath);
     });
 
-    afterEach((done) => {
-      server!.close(() => {
-        if (process.platform === 'win32') {
-          done();
-        } else {
-          fs.unlink(socketPath, () => done());
-        }
-      });
+    afterEach(async () => {
+      await promisify(server!.close)();
+
+      if (process.platform !== 'win32') {
+        fs.promises.unlink(socketPath);
+      }
     });
 
     it('relaunches the app', function (done) {
@@ -1188,10 +1182,8 @@ describe('app module', () => {
       });
     });
 
-    after(function (done) {
-      if (process.platform !== 'win32') {
-        done();
-      } else {
+    after(async () => {
+      if (process.platform === 'win32') {
         const protocolKey = new Winreg({
           hive: Winreg.HKCU,
           key: `\\Software\\Classes\\${protocol}`
@@ -1199,7 +1191,7 @@ describe('app module', () => {
 
         // The last test leaves the registry dirty,
         // delete the protocol key for those of us who test at home
-        protocolKey.destroy(() => done());
+        await promisify(protocolKey.destroy)();
       }
     });
 
@@ -1537,27 +1529,20 @@ describe('app module', () => {
     let server: net.Server = null as any;
     const socketPath = process.platform === 'win32' ? '\\\\.\\pipe\\electron-mixed-sandbox' : '/tmp/electron-mixed-sandbox';
 
-    beforeEach(function (done) {
-      fs.unlink(socketPath, () => {
-        server = net.createServer();
-        server.listen(socketPath);
-        done();
-      });
+    beforeEach(async () => {
+      await fs.promises.unlink(socketPath);
+      server = net.createServer();
+      server.listen(socketPath);
     });
 
-    afterEach(done => {
+    afterEach(async () => {
       if (appProcess != null) appProcess.kill();
 
       if (server) {
-        server.close(() => {
-          if (process.platform === 'win32') {
-            done();
-          } else {
-            fs.unlink(socketPath, () => done());
-          }
-        });
-      } else {
-        done();
+        await promisify(server.close)();
+        if (process.platform !== 'win32') {
+          await fs.promises.unlink(socketPath);
+        }
       }
     });
 

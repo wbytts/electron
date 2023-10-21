@@ -6,10 +6,10 @@ import * as fs from 'fs-extra';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as psList from 'ps-list';
-import { AddressInfo } from 'node:net';
-import { ifdescribe, ifit } from './lib/spec-helpers';
+import { ifdescribe, ifit, listen } from './lib/spec-helpers';
 import * as uuid from 'uuid';
 import { autoUpdater, systemPreferences } from 'electron';
+import { promisify } from 'node:util';
 
 const features = process._linkedBinding('electron_common_features');
 
@@ -196,28 +196,21 @@ ifdescribe(process.platform === 'darwin' && !(process.env.CI && process.arch ===
     let httpServer: http.Server = null as any;
     let requests: express.Request[] = [];
 
-    beforeEach((done) => {
+    beforeEach(async () => {
       requests = [];
       server = express();
       server.use((req, res, next) => {
         requests.push(req);
         next();
       });
-      httpServer = server.listen(0, '127.0.0.1', () => {
-        port = (httpServer.address() as AddressInfo).port;
-        done();
-      });
+      port = (await listen(httpServer)).port;
     });
 
     afterEach(async () => {
       if (httpServer) {
-        await new Promise<void>(resolve => {
-          httpServer.close(() => {
-            httpServer = null as any;
-            server = null as any;
-            resolve();
-          });
-        });
+        await promisify(httpServer.close)();
+        httpServer = null as any;
+        server = null as any;
       }
     });
 

@@ -8,6 +8,7 @@ import { session, net } from 'electron/main';
 import { Socket } from 'node:net';
 import { ifit, listen } from './lib/spec-helpers';
 import { once } from 'node:events';
+import { promisify } from 'node:util';
 
 const appPath = path.join(__dirname, 'fixtures', 'api', 'net-log');
 const dumpFile = path.join(os.tmpdir(), 'net_log.json');
@@ -34,14 +35,12 @@ describe('netLog module', () => {
     serverUrl = (await listen(server)).url;
   });
 
-  after(done => {
+  after(async () => {
     for (const connection of connections) {
       connection.destroy();
     }
-    server.close(() => {
-      server = null as any;
-      done();
-    });
+    await promisify(server.close)();
+    server = null as any;
   });
 
   beforeEach(() => {

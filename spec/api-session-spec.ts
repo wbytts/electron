@@ -11,6 +11,7 @@ import { closeAllWindows } from './lib/window-helpers';
 import { defer, listen } from './lib/spec-helpers';
 import { once } from 'node:events';
 import { setTimeout } from 'node:timers/promises';
+import { promisify } from 'node:util';
 
 describe('session module', () => {
   const fixtures = path.resolve(__dirname, 'fixtures');
@@ -644,9 +645,7 @@ describe('session module', () => {
       serverUrl = (await listen(server)).url;
     });
 
-    afterEach((done) => {
-      server.close(done);
-    });
+    afterEach(async () => promisify(server.close)());
     afterEach(closeAllWindows);
 
     it('accepts the request when the callback is called with 0', async () => {
